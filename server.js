@@ -1,33 +1,82 @@
-const express = require('express');
-const mongoose = require('mongoose');
-const cors = require('cors');
-const dotenv = require('dotenv');
-const userRoutes = require('./routes/userRoutes');
+process.env.MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/yourDatabaseName';
 
-app.use('/api/users', userRoutes);
+const express = require('express');
+const http = require('http');
+const socketIo = require('socket.io');
+const path = require('path');
+const mongoose = require('mongoose');
+const dotenv = require('dotenv');
+const session = require('express-session');
+const passport = require('passport');
+const flash = require('connect-flash');
 
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const server = http.createServer(app);
+const io = socketIo(server);
+
+// Database connection
+mongoose.connect(process.env.MONGODB_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true
+}).then(() => console.log('MongoDB Connected'))
+    .catch(err => console.log(err));
+
+// Passport config
+require('./config/passport')(passport);
 
 // Middleware
-app.use(cors());
-app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
+app.use(express.static(path.join(__dirname, 'public')));
+app.set('view engine', 'ejs');
 
-// MongoDB connection
-mongoose.connect(process.env.MONGO_URI, {
-    useNewUrlParser: true,
-    useUnifiedTopology: true,
-})
-    .then(() => console.log('MongoDB connected'))
-    .catch(err => console.error(err));
+// Express session
+app.use(session({
+    secret: 'secret',
+    resave: true,
+    saveUninitialized: true
+}));
 
-// Routes
-app.get('/', (req, res) => {
-    res.send('E-commerce API');
+// Passport middleware
+app.use(passport.initialize());
+app.use(passport.session());
+
+// Connect flash
+app.use(flash());
+
+// Global variables
+app.use((req, res, next) => {
+    res.locals.success_msg = req.flash('success_msg');
+    res.locals.error_msg = req.flash('error_msg');
+    res.locals.error = req.flash('error');
+    next();
 });
 
-app.listen(PORT, () => {
-    console.log(`http://localhost:${PORT}`);
+// Routes
+app.use('/', require('./routes/index'));
+app.use('/users', require('./routes/auth'));
+
+io.on('connection', (socket) => {
+    console.log('A user connected');
+
+    socket.on('joinRoom', ({ username, room }) => {
+        socket.join(room);
+        socket.broadcast.to(room).emit('message', `${username} has joined the chat`);
+    });
+
+    // Handle chat message
+    socket.on('chatMessage', (msg) => {
+        io.to(msg.room).emit('message', msg);
+    });
+
+    // Handle disconnection
+    socket.on('disconnect', () => {
+        console.log('User disconnected');
+    });
+});
+
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => {
+    console.log(`Server running on port http://localhost:${PORT}`);
 });

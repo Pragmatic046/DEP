@@ -1,0 +1,17 @@
+<% include ./layout %>
+<% block body %>
+<div class="chat-container">
+    <h1 class="text-center">Chat Room</h1>
+    <div id="chat-messages">
+        <% messages.forEach(message => { %>
+            <div class="message">
+                <strong><%= message.username %>:</strong> <%= message.message %>
+            </div>
+        <% }); %>
+    </div>
+    <form id="chat-form">
+        <input id="msg" type="text" placeholder="Enter message" required>
+        <button type="submit" class="btn btn-primary">Send</button>
+    </form>
+</div>
+<% endblock %>
